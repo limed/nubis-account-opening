@@ -20,6 +20,7 @@ Usage: aws-organizations.py [options]
 
 Options:
     -l | --list     List AWS accounts
+    --list-all      List all AWS accounts even suspended accounts
     -e | --email    Email address to create AWS account with
     -a | --account  Name of AWS account, must use with -e
 """
