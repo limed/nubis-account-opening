@@ -4,13 +4,14 @@ import boto3
 import sys
 from optparse import OptionParser
 
-def depaginate(function, resource_key, **kwargs):
-    # Will depaginate results made to an aws client
-    response = function(**kwargs)
-    results = response[resource_key]
-    while (response.get("NextToken", None) is not None):
-        response = function(NextToken=response.get("NextToken"), **kwargs)
-        results = results + response[resource_key]
+def depaginate_accounts(boto_handle):
+    paginator = boto_handle.get_paginator('list_accounts')
+    response_iterator = paginator.paginate()
+
+    results = []
+    for response in response_iterator:
+        results = results + response['Accounts']
+
     return results
 
 def usage():
@@ -28,24 +29,24 @@ if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-e", "--email", dest="email_address", default='', help="Email address for AWS account")
     parser.add_option("-a", "--account", dest="account_name", default='', help="AWS Account name")
-    parser.add_option("-l", "--list", dest="list_accounts", action="store_true", default=False, help="List AWS accounts")
+    parser.add_option("-l", "--list", dest="list_accounts", action="store_true", default=False, help="List AWS accounts thats not suspended")
+    parser.add_option("--list-all", dest="list_all_accounts", action="store_true", default=False, help="List all AWS account")
     (options, args) = parser.parse_args()
 
     client = boto3.client('organizations')
-    parent_obj = client.list_roots()['Roots'][0]
 
-    child_accounts = depaginate(
-        function=client.list_accounts_for_parent,
-        resource_key='Accounts',
-        ParentId=parent_obj["Id"]
-    )
+    # Paginate outputs and dump it into an object
+    response = depaginate_accounts(client)
 
     if options.list_accounts:
-        for index in child_accounts:
+        for index in response:
             if index['Status'] != 'SUSPENDED':
                 print index['Id'] + ' - ' + index['Email'] + ' (' + index['Name'] + ')'
+    elif options.list_all_accounts:
+        for index in response:
+            print index['Id'] + ' - ' + index['Email'] + ' (' + index['Name'] + ')' + " [" + index['Status'] + "]"
     elif (options.account_name != '') and (options.email_address != ''):
-        if not any(index['Email'] == options.email_address for index in child_accounts):
+        if not any(index['Email'] == options.email_address for index in response):
             print "Email " + options.email_address + " does not exist, creating account"
             response = client.create_account(
                     Email=options.email_address,
